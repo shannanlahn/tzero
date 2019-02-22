@@ -1,0 +1,130 @@
+
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Get Active Accounts</title>
+</head>
+<body>
+<script>
+
+const queryString = '/status-email?accountId=8675309&accountsEndpoint=account&usersEndpoint=user&emailEndpoint=sendGrid';
+const PROXY_URL = 'https://cors-anywhere.herokuapp.com/';
+const BASE_URL = 'https://safe-beyond-14033.herokuapp.com';
+let status = '';
+let emailEndPt = '';
+
+//step one, starting here to get a response to start the process
+async function sendAccountOwnerEmail(  ) {
+ 
+    const URL = PROXY_URL + BASE_URL + '/account/' + getAccountId( ) ;
+    try{
+        const RESPONSE =  await fetch(URL);
+        const result = await RESPONSE.json();
+        return result;
+    } catch (err) {
+        console.log(err)
+    }
+}
+
+//step two, get the parsed account id from the query string
+function getAccountId(){
+
+    let data = queryString.slice(14).split('&');
+    let id = 0;
+
+    if(data[0].startsWith('accountId')){        
+        data = data[0].split('=');
+        id = data[1];
+    }
+    return id;
+}
+
+//step three, we are getting the users emails based on the response we recevied from the parsed querystring
+function getUsers( accts ){
+    status = accts.status;
+    const USER_URL = PROXY_URL + BASE_URL + "/user/";
+    const list = accts.users; 
+    let emailInfo = [];
+    var results = new Promise((resolve,reject) => {
+      
+        for(let i =0; i < list.length; i++){
+            findUser( list[i] ).then(
+                function(data){                    
+                    emailInfo.push( data  ) ;
+                }            
+            );                      
+        }
+
+        setTimeout(() => {     
+            resolve(emailInfo);
+        }, 3000);
+        
+    });
+    return results;
+
+}
+
+//part of step three, getting emails for each user 
+async function findUser( userid ) {
+    const USER_URL = PROXY_URL + BASE_URL + "/user/" + userid;
+    try {
+        const RESPONSE =  await fetch(USER_URL);
+        const result = await RESPONSE.json();
+                 
+        return result;
+    } catch (err) {
+        console.log(err)
+    }     
+}
+
+//step four, finally sending all the data we have collected and parsed.
+//also getting the endpoint to send to
+async function sendAllEmail( userData ){
+    
+    let emails = '';
+    for (var i=0; i<userData.length; i++){
+        emails += "{firstName:"+userData[i].firstName +",email:" +userData[i].email +"},";
+    }
+
+    let result = JSON.stringify({accountStatus: status, users: [ emails ] });
+    const POST_URL = PROXY_URL + BASE_URL + "/" + getEmailEndPoint();
+
+    try{
+        const response =  await fetch(POST_URL, {
+            method: 'POST',
+            headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+            },
+            body: result
+        });
+        const res= await response.json();
+        
+        console.log(res);
+    } catch (err) {
+        console.log(err)
+    }
+}
+
+//parse query string for email endpoint
+function getEmailEndPoint(){
+
+let data = queryString.slice(-8);
+return data;
+}
+
+//where the app begins with some promises calls to get the data need for the final post.
+sendAccountOwnerEmail( )
+    .then( accts => getUsers(accts) ) 
+    .then( (data) => {
+        sendAllEmail(data);
+    } )
+    .catch(error => {
+        console.log('Request failed', error)
+    });  
+
+  </script>
+
+  </body>
+  </html>
